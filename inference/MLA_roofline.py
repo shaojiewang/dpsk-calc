@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 from si_prefix import si_format
 
 # 设置硬件参数
-peak_flops = 232e12       # 1 TFLOP/s
-memory_bandwidth = 5300e9  # 200 GB/s
+peak_flops = 1300e12       # 1 TFLOP/s
+memory_bandwidth = 4800e9  # 200 GB/s
 
 # 设置模型参数
 hidden_dim = 7168
@@ -14,9 +14,16 @@ n_h = 128
 h_d = 128
 h_d_r = 64
 tp = 8
+expert_hidden_dim = 2048
+num_experts = 256
+topk = 8
+num_shared_experts = 1
 
 def mem_acc_size_per_gemm(b, m, n, k, ele_size):
-    return ele_size * (b * m * n + b * m * k + b * n * k)
+    return ele_size * (b * m * n * 0 + b * m * k + b * n * k)
+
+def mem_acc_size_per_grouped_gemm(b_a, b_b, m, n, k, ele_size):
+    return ele_size * (b_a * m * n * 0 + b_a * m * k + b_b * n * k)
 
 def ops_per_gemm(b, m, n, k):
     return b * m * n * k * 2
@@ -27,18 +34,52 @@ def mem_acc_size_per_attn(b, nh_q, nh_kv, s_q, s_kv, hd_qk, hd_v, ele_size):
 def ops_per_attn(b, nh_q, s_q, s_kv, hd_qk, hd_v):
     return b * nh_q * (s_q * s_kv * hd_qk + s_kv * s_kv * hd_v) * 2
 
-# def compute_intensity(b, hidden_dim, h_q, h_c, n_h, h_d, h_dr, tp, ):
+def mla_compute_intensity(b, hidden_dim, h_q, h_c, n_h, h_d, h_dr, tp):
+    gemm_0_ops = ops_per_gemm(1, b, hidden_dim, h_q + h_c)
+    gemm_0_mem = mem_acc_size_per_gemm(1, b, hidden_dim, h_q + h_c, 1)
+    gemm_1_ops = ops_per_gemm(1, b, h_q + h_c, n_h // tp * (h_d + h_dr))
+    gemm_1_mem = mem_acc_size_per_gemm(1, b, h_q + h_c, n_h // tp * (h_d + h_dr), 1)
+    gemm_2_ops = ops_per_gemm(16, b, h_d, h_c)
+    gemm_2_mem = mem_acc_size_per_gemm(16, b, h_d, h_c, 2)
+    gemm_3_ops = ops_per_gemm(1, b, h_c, h_dr)
+    gemm_3_mem = mem_acc_size_per_gemm(1, b, h_c, h_dr, 1)
+    gemm_4_ops = ops_per_gemm(16, b, h_c, h_d)
+    gemm_4_mem = mem_acc_size_per_gemm(16, b, h_c, h_d, 2)
+    gemm_5_ops = ops_per_gemm(1, b, n_h // tp * h_d, hidden_dim)
+    gemm_5_mem = mem_acc_size_per_gemm(1, b, n_h // tp * h_d, hidden_dim, 1)
+    return (gemm_0_ops + gemm_1_ops + gemm_2_ops + gemm_3_ops + gemm_4_ops + gemm_5_ops) / (gemm_0_mem + gemm_1_mem + gemm_2_mem + gemm_3_mem + gemm_4_mem + gemm_5_mem)
 
+def moe_compute_intensity(b, h, e, tp, topk, num_experts, num_shared_experts):
+    shared_gemm_up_ops = ops_per_gemm(num_shared_experts, b, e * 2 / tp, h)
+    shared_gemm_down_ops = ops_per_gemm(num_shared_experts, b, h, e / tp)
+    routed_gemm_up_ops = ops_per_gemm(topk, b, e * 2 / tp, h)
+    routed_gemm_down_ops = ops_per_gemm(topk, b, h, e / tp)
+    shared_gemm_up_mem = mem_acc_size_per_gemm(num_shared_experts, b, e * 2 / tp, h, 1)
+    shared_gemm_down_mem = mem_acc_size_per_gemm(num_shared_experts, b, h, e / tp, 1)
+    routed_gemm_up_mem = mem_acc_size_per_grouped_gemm(topk, num_experts, b, e * 2 / tp, h, 1)
+    routed_gemm_down_mem = mem_acc_size_per_grouped_gemm(topk, num_experts, b, h, e / tp, 1)
+    return (shared_gemm_up_ops + shared_gemm_down_ops + routed_gemm_up_ops + routed_gemm_down_ops) / (shared_gemm_up_mem + shared_gemm_down_mem + routed_gemm_up_mem + routed_gemm_down_mem)
 
-# memory_access_per_batch = 
+max_bsz = 10000
+
+bsz = np.linspace(1, max_bsz, max_bsz)
+#real_OI = mla_compute_intensity(bsz, hidden_dim, h_q, h_c, n_h, h_d, h_d_r, tp)
+real_OI = moe_compute_intensity(bsz, hidden_dim, expert_hidden_dim, tp, topk, num_experts, num_shared_experts)
+print(real_OI)
+
+points = [tuple(item) for item in zip(bsz, real_OI)]
 
 # 计算临界运算强度
 critical_OI = peak_flops / memory_bandwidth  # FLOP/byte
 
+passing_bsz = 1
+for item in points:
+    if item[1] > critical_OI:
+        passing_bsz = item[0]
+        break
+
 points = [
-    (2, 400e9),    # 内存受限区示例点
-    (8, 1e12),     # 计算受限区示例点
-    (critical_OI, peak_flops)  # 临界点
+    (passing_bsz, peak_flops)  # 临界点
 ]
 
 # 生成运算强度范围（对数坐标）
@@ -46,16 +87,17 @@ points = [
 OI = np.linspace(0.1, 100, 50)  # 从0.1到100 FLOP/byte
 
 # 计算理论性能
-performance = np.minimum(memory_bandwidth * OI, peak_flops)
+# performance = np.minimum(memory_bandwidth * OI, peak_flops)
+performance = np.minimum(memory_bandwidth * real_OI, peak_flops)
 
 # 创建图形
 plt.figure(figsize=(10, 6))
 # plt.loglog(OI, performance, 'b-', linewidth=2, label='Roofline')
-plt.plot(OI, performance, 'b-', linewidth=2, label='Roofline')
+plt.plot(bsz, performance, 'b-', linewidth=2, label='Roofline')
 
 # 添加特征点标注
-colors = ['red', 'blue', 'purple']
-labels = ['Memory-Bound Example', 'Compute-Bound Example', 'Critical Point']
+colors = ['purple']
+labels = ['Critical Point']
 for idx, (x, y) in enumerate(points):
     plt.scatter(x, y, s=80, marker='X', 
                 edgecolors=colors[idx], 
@@ -68,7 +110,7 @@ plt.axhline(peak_flops, color='r', linestyle='--', linewidth=1, label='Peak FLOP
 plt.axvline(critical_OI, color='g', linestyle='--', linewidth=1, label='Critical OI')
 
 # 设置坐标轴标签
-plt.xlabel('Operational Intensity (FLOP/byte)', fontsize=12)
+plt.xlabel('batch size (bsz)', fontsize=12)
 plt.ylabel('Performance (FLOP/s)', fontsize=12)
 plt.title('Roofline Model', fontsize=14)
 
@@ -80,7 +122,7 @@ plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(si_formatter))
 
 # 对x轴进行特殊处理（FLOP/byte单位）
 plt.gca().xaxis.set_major_formatter(plt.FuncFormatter(
-    lambda x, _: f"{si_format(x, precision=1)} FLOP/byte"
+    lambda x, _: f"{si_format(x, precision=1)} "
 ))
 
 # 添加图例和网格
