@@ -1,6 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from si_prefix import si_format
+from utils import *
 
 # 设置硬件参数
 peak_flops = 1300e12       # 1 TFLOP/s
@@ -19,21 +18,6 @@ num_experts = 256
 topk = 8
 num_shared_experts = 1
 
-def mem_acc_size_per_gemm(b, m, n, k, ele_size):
-    return ele_size * (b * m * n * 0 + b * m * k + b * n * k)
-
-def mem_acc_size_per_grouped_gemm(b_a, b_b, m, n, k, ele_size):
-    return ele_size * (b_a * m * n * 0 + b_a * m * k + b_b * n * k)
-
-def ops_per_gemm(b, m, n, k):
-    return b * m * n * k * 2
-
-def mem_acc_size_per_attn(b, nh_q, nh_kv, s_q, s_kv, hd_qk, hd_v, ele_size):
-    return b * (nh_q * s_q * hd_qk * 2 + nh_kv * s_kv * hd_qk + nh_kv * s_kv * hd_v) * ele_size
-
-def ops_per_attn(b, nh_q, s_q, s_kv, hd_qk, hd_v):
-    return b * nh_q * (s_q * s_kv * hd_qk + s_kv * s_kv * hd_v) * 2
-
 def mla_compute_intensity(b, hidden_dim, h_q, h_c, n_h, h_d, h_dr, tp):
     gemm_0_ops = ops_per_gemm(1, b, hidden_dim, h_q + h_c)
     gemm_0_mem = mem_acc_size_per_gemm(1, b, hidden_dim, h_q + h_c, 1)
@@ -49,23 +33,11 @@ def mla_compute_intensity(b, hidden_dim, h_q, h_c, n_h, h_d, h_dr, tp):
     gemm_5_mem = mem_acc_size_per_gemm(1, b, n_h // tp * h_d, hidden_dim, 1)
     return (gemm_0_ops + gemm_1_ops + gemm_2_ops + gemm_3_ops + gemm_4_ops + gemm_5_ops) / (gemm_0_mem + gemm_1_mem + gemm_2_mem + gemm_3_mem + gemm_4_mem + gemm_5_mem)
 
-def moe_compute_intensity(b, h, e, tp, topk, num_experts, num_shared_experts):
-    shared_gemm_up_ops = ops_per_gemm(num_shared_experts, b, e * 2 / tp, h)
-    shared_gemm_down_ops = ops_per_gemm(num_shared_experts, b, h, e / tp)
-    routed_gemm_up_ops = ops_per_gemm(topk, b, e * 2 / tp, h)
-    routed_gemm_down_ops = ops_per_gemm(topk, b, h, e / tp)
-    shared_gemm_up_mem = mem_acc_size_per_gemm(num_shared_experts, b, e * 2 / tp, h, 1)
-    shared_gemm_down_mem = mem_acc_size_per_gemm(num_shared_experts, b, h, e / tp, 1)
-    routed_gemm_up_mem = mem_acc_size_per_grouped_gemm(topk, num_experts, b, e * 2 / tp, h, 1)
-    routed_gemm_down_mem = mem_acc_size_per_grouped_gemm(topk, num_experts, b, h, e / tp, 1)
-    return (shared_gemm_up_ops + shared_gemm_down_ops + routed_gemm_up_ops + routed_gemm_down_ops) / (shared_gemm_up_mem + shared_gemm_down_mem + routed_gemm_up_mem + routed_gemm_down_mem)
-
 max_bsz = 10000
 
 bsz = np.linspace(1, max_bsz, max_bsz)
-#real_OI = mla_compute_intensity(bsz, hidden_dim, h_q, h_c, n_h, h_d, h_d_r, tp)
-real_OI = moe_compute_intensity(bsz, hidden_dim, expert_hidden_dim, tp, topk, num_experts, num_shared_experts)
-print(real_OI)
+real_OI = mla_compute_intensity(bsz, hidden_dim, h_q, h_c, n_h, h_d, h_d_r, tp)
+# print(real_OI)
 
 points = [tuple(item) for item in zip(bsz, real_OI)]
 
@@ -90,45 +62,6 @@ OI = np.linspace(0.1, 100, 50)  # 从0.1到100 FLOP/byte
 # performance = np.minimum(memory_bandwidth * OI, peak_flops)
 performance = np.minimum(memory_bandwidth * real_OI, peak_flops)
 
-# 创建图形
-plt.figure(figsize=(10, 6))
-# plt.loglog(OI, performance, 'b-', linewidth=2, label='Roofline')
-plt.plot(bsz, performance, 'b-', linewidth=2, label='Roofline')
+plot_roofline(bsz, performance, points, peak_flops, critical_OI)
 
-# 添加特征点标注
-colors = ['purple']
-labels = ['Critical Point']
-for idx, (x, y) in enumerate(points):
-    plt.scatter(x, y, s=80, marker='X', 
-                edgecolors=colors[idx], 
-                facecolors='none',
-                linewidths=1.5,
-                label=labels[idx])
-
-# 添加标注线
-plt.axhline(peak_flops, color='r', linestyle='--', linewidth=1, label='Peak FLOPS')
-plt.axvline(critical_OI, color='g', linestyle='--', linewidth=1, label='Critical OI')
-
-# 设置坐标轴标签
-plt.xlabel('batch size (bsz)', fontsize=12)
-plt.ylabel('Performance (FLOP/s)', fontsize=12)
-plt.title('Roofline Model', fontsize=14)
-
-# 使用si-prefix格式化坐标轴
-def si_formatter(value, _):
-    return f"{si_format(value, precision=1)}FLOP/s"
-
-plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(si_formatter))
-
-# 对x轴进行特殊处理（FLOP/byte单位）
-plt.gca().xaxis.set_major_formatter(plt.FuncFormatter(
-    lambda x, _: f"{si_format(x, precision=1)} "
-))
-
-# 添加图例和网格
-plt.legend()
-plt.grid(True, which="both", ls="--", alpha=0.5)
-
-# 显示图形
-plt.tight_layout()
-plt.show()
+draw_table()
