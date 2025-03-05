@@ -4,6 +4,18 @@ from si_prefix import si_format
 
 from utils import *
 
+def moe_compute_intensity(b, h, e, tp, topk, num_experts, num_shared_experts):
+    shared_gemm_up_ops = ops_per_gemm(num_shared_experts, b, e * 2 / tp, h)
+    shared_gemm_down_ops = ops_per_gemm(num_shared_experts, b, h, e / tp)
+    routed_gemm_up_ops = ops_per_gemm(topk, b, e * 2 / tp, h)
+    routed_gemm_down_ops = ops_per_gemm(topk, b, h, e / tp)
+    shared_gemm_up_mem = mem_acc_size_per_gemm(num_shared_experts, b, e * 2 / tp, h, 1)
+    shared_gemm_down_mem = mem_acc_size_per_gemm(num_shared_experts, b, h, e / tp, 1)
+    routed_gemm_up_mem = mem_acc_size_per_grouped_gemm(topk, num_experts, b, e * 2 / tp, h, 1)
+    routed_gemm_down_mem = mem_acc_size_per_grouped_gemm(topk, num_experts, b, h, e / tp, 1)
+    return (shared_gemm_up_ops + shared_gemm_down_ops + routed_gemm_up_ops + routed_gemm_down_ops) / (shared_gemm_up_mem + shared_gemm_down_mem + routed_gemm_up_mem + routed_gemm_down_mem)
+
+
 # 设置硬件参数
 peak_flops = 1300e12       # 1 TFLOP/s
 memory_bandwidth = 4800e9  # 200 GB/s
@@ -21,16 +33,6 @@ num_experts = 256
 topk = 8
 num_shared_experts = 1
 
-def moe_compute_intensity(b, h, e, tp, topk, num_experts, num_shared_experts):
-    shared_gemm_up_ops = ops_per_gemm(num_shared_experts, b, e * 2 / tp, h)
-    shared_gemm_down_ops = ops_per_gemm(num_shared_experts, b, h, e / tp)
-    routed_gemm_up_ops = ops_per_gemm(topk, b, e * 2 / tp, h)
-    routed_gemm_down_ops = ops_per_gemm(topk, b, h, e / tp)
-    shared_gemm_up_mem = mem_acc_size_per_gemm(num_shared_experts, b, e * 2 / tp, h, 1)
-    shared_gemm_down_mem = mem_acc_size_per_gemm(num_shared_experts, b, h, e / tp, 1)
-    routed_gemm_up_mem = mem_acc_size_per_grouped_gemm(topk, num_experts, b, e * 2 / tp, h, 1)
-    routed_gemm_down_mem = mem_acc_size_per_grouped_gemm(topk, num_experts, b, h, e / tp, 1)
-    return (shared_gemm_up_ops + shared_gemm_down_ops + routed_gemm_up_ops + routed_gemm_down_ops) / (shared_gemm_up_mem + shared_gemm_down_mem + routed_gemm_up_mem + routed_gemm_down_mem)
 
 max_bsz = 10000
 

@@ -18,17 +18,22 @@ def mem_acc_size_per_attn(b, nh_q, nh_kv, s_q, s_kv, hd_qk, hd_v, ele_size):
 def ops_per_attn(b, nh_q, s_q, s_kv, hd_qk, hd_v):
     return b * nh_q * (s_q * s_kv * hd_qk + s_kv * s_kv * hd_v) * 2
 
-def plot_roofline(bsz, perf, points, peak_flops, critical_OI):
+def plot_roofline(bsz, perfs, passing_points, hws):
     # 创建图形
     plt.figure(figsize=(10, 6))
-    # plt.loglog(OI, performance, 'b-', linewidth=2, label='Roofline')
+    # plt.loglog(OI, performance, 'b-', linewidth=2, label='Roofline')+
 
-    plt.plot(bsz, perf, 'b-', linewidth=2, label='Roofline')
+    colors = ['green', 'red', 'blue', 'black']
+
+    for idx, perf in enumerate(perfs):
+        plt.plot(bsz, perf, '-', color=colors[idx], linewidth=2, label=f'Roofline of {hws[idx].hw_name}')
 
     # 添加特征点标注
-    colors = ['purple']
-    labels = ['Critical Point']
-    for idx, (x, y) in enumerate(points):
+    
+    labels = []
+    for hw in hws:
+        labels.append(f'Critical Point {hw.hw_name}')
+    for idx, (x, y) in enumerate(passing_points):
         plt.scatter(x, y, s=80, marker='X', 
                     edgecolors=colors[idx], 
                     facecolors='none',
@@ -36,8 +41,9 @@ def plot_roofline(bsz, perf, points, peak_flops, critical_OI):
                     label=labels[idx])
 
     # 添加标注线
-    plt.axhline(peak_flops, color='r', linestyle='--', linewidth=1, label='Peak FLOPS')
-    plt.axvline(critical_OI, color='g', linestyle='--', linewidth=1, label='Critical OI')
+    for hw in hws:
+        plt.axhline(hw.peak_flops, color='r', linestyle='--', linewidth=1, label=f'Peak FLOPS of {hw.hw_name}')
+        # plt.axvline(hw.critical_OI, color='g', linestyle='--', linewidth=1, label=f'Critical OI of {hw.hw_name}')
 
     # 设置坐标轴标签
     plt.xlabel('batch size (bsz)', fontsize=12)
@@ -56,7 +62,7 @@ def plot_roofline(bsz, perf, points, peak_flops, critical_OI):
     ))
 
     # 添加图例和网格
-    plt.legend()
+    plt.legend(loc="lower right")
     plt.grid(True, which="both", ls="--", alpha=0.5)
 
     # 显示图形
@@ -65,14 +71,27 @@ def plot_roofline(bsz, perf, points, peak_flops, critical_OI):
 
 def draw_table():
     table = PrettyTable()
-    table.field_names = ["Name", "Age", "City"]
+    table.field_names = ["ai chip name", "compute bound batch size"]
 
     # 添加数据
-    table.add_row(["Alice", 30, "New York"])
-    table.add_row(["Bob", 25, "Los Angeles"])
-    table.add_row(["Charlie", 35, "Chicago"])
+    table.add_row(["Alice", 30])
+    table.add_row(["Bob", 25])
+    table.add_row(["Charlie", 35])
 
-    table.title = "User Information"  # 添加标题
+    table.title = "roofline"  # 添加标题
 
     # 输出
     print(table)
+
+from dataclasses import dataclass
+
+@dataclass
+class HW_DATA(object):
+    hw_name: str
+    peak_flops: float
+    memory_bandwidth: float
+    nvl_bandwidth: float
+    ib_bandwidth: float
+
+    def __post_init__(self):
+        self.critical_OI = self.peak_flops / self.memory_bandwidth
