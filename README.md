@@ -2,5 +2,5 @@
 
 ## Getting started
 
-python3 inference/MLA_roofline.py 
+python3 inference/r1_model_roofline.py 
 
