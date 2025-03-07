@@ -20,6 +20,8 @@ context_lens = [4096, 5120, 6144, 8192, 16384, 32768, 65536, 102400]
 
 eps = [8, 16, 32, 64, 128]
 
+
+
 table = PrettyTable()
 
 model_stable_size = 14.11 * 1024 ** 3
@@ -28,12 +30,14 @@ kvcache_size_per_token = 70272
 
 table.field_names = ["ai chip name", "context", "ep", "max_bsz", "latency", "tps", "tps/node", "tps/card"]
 
-
+epsilon = 1e-9
 for context_len in context_lens:
-    for ep in eps:
-        for hw in hws:
+    plt.figure(figsize=(10, 6))
+    for hw in hws:
+        tgs = []
+        for ep in eps:
             comm_bw = hw.nvl_bandwidth if ep <= hw.nvl_num else hw.ib_bandwidth
-            max_bsz = int((hw.hbm_size - model_stable_size - model_dist_size / ep) / (kvcache_size_per_token * context_len)) * ep
+            max_bsz = max(0, int((hw.hbm_size - model_stable_size - model_dist_size / ep) / (kvcache_size_per_token * context_len)) * ep)
             time_ms_mla0_s_dispatch = max(
                 comm_time_ms(max_bsz, hidden_dim, ep, topk, comm_bw, 1),
                 shared_expert_time_ms(max_bsz, hidden_dim, ep, expert_hidden_dim, num_shared_experts, hw.peak_flops, hw.memory_bandwidth) + 
@@ -47,11 +51,35 @@ for context_len in context_lens:
                 mla1_time_ms(max_bsz / ep, context_len, n_h, h_d, h_d_r, h_c, hidden_dim, hw.peak_flops / 2, hw.memory_bandwidth)
             )
             print(time_ms_mla1_combine)
-            time_ms = (time_ms_mla0_s_dispatch + time_ms_moe + time_ms_mla1_combine) * num_layers
+            if max_bsz == 0:
+                time_ms = epsilon
+            else:
+                time_ms = (time_ms_mla0_s_dispatch + time_ms_moe + time_ms_mla1_combine) * num_layers
             tokens_total = 1 / time_ms * max_bsz / 1000
             tokens_per_node = tokens_total / max(1, (ep / hw.nvl_num))
             tokens_per_card = tokens_total / ep
             table.add_row([hw.hw_name, context_len, ep, max_bsz, f"{time_ms:.3f}", f"{tokens_total:.1f}k", f'{tokens_per_node:.1f}k', f'{tokens_per_card:.2f}k'])
+            tgs.append(tokens_per_card)
+
+        plt.plot(
+            eps,
+            tgs,
+            marker="o",         # 数据点标记
+            linewidth=2,        # 线宽
+            label=hw.hw_name        # 图例标签（使用列名）
+        )
+
+    # 添加标题和标签
+    plt.title(f"context len: {context_len}", fontsize=14)
+    plt.xlabel("ep size", fontsize=12)
+    plt.ylabel("kilo-tokens per card", fontsize=12)
+
+    # 添加图例和网格
+    plt.legend(loc="lower right")  # 图例位置
+    plt.grid(True, linestyle="--", alpha=0.6)
+
+# 显示图表
+plt.show()
 
 table.title = "deepseek r1 671B decode performance comparison"
 print(table)

@@ -129,6 +129,7 @@ class HW_DATA(object):
     nvl_bandwidth: float
     nvl_num: int
     ib_bandwidth: float
+    #styles: dict
 
     def __post_init__(self):
         self.critical_OI = self.peak_flops / self.memory_bandwidth
