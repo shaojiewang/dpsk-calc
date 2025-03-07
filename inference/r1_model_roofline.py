@@ -16,9 +16,9 @@ topk = 8
 num_shared_experts = 1
 num_layers = 61
 
-context_lens = [4096] #, 5120, 6144, 8192, 16384, 32768, 65536, 102400]
+context_lens = [4096, 5120, 6144, 8192, 16384, 32768, 65536, 102400]
 
-eps = [8] # [8, 16, 32, 64, 128]
+eps = [8, 16, 32, 64, 128]
 
 table = PrettyTable()
 
@@ -26,11 +26,11 @@ model_stable_size = 14.11 * 1024 ** 3
 model_dist_size = 609 * 1024 ** 3
 kvcache_size_per_token = 70272
 
-table.field_names = ["ai chip name", "context length", "ep", "max_batch_size", "min_time_s_per_batch", "max_decode_tps"]
+table.field_names = ["ai chip name", "context length", "ep", "max_batch_size", "min_time_s_per_batch", "decode_tps", "decode_tps_per_node", "decode_tps_per_card"]
 
 
-for ep in eps:
-    for context_len in context_lens:
+for context_len in context_lens:
+    for ep in eps:
         for hw in hws:
             comm_bw = hw.nvl_bandwidth if ep <= hw.nvl_num else hw.ib_bandwidth
             max_bsz = int((hw.hbm_size - model_stable_size - model_dist_size / ep) / (kvcache_size_per_token * context_len)) * ep
@@ -49,7 +49,9 @@ for ep in eps:
             print(time_ms_mla1_combine)
             time_ms = (time_ms_mla0_s_dispatch + time_ms_moe + time_ms_mla1_combine) * num_layers
             tokens_total = 1 / time_ms * max_bsz
-            table.add_row([hw.hw_name, context_len, ep, max_bsz, time_ms, tokens_total])
+            tokens_per_node = tokens_total / max(1, (ep / hw.nvl_num))
+            tokens_per_card = tokens_total / ep
+            table.add_row([hw.hw_name, context_len, ep, max_bsz, f"{time_ms:.3f}", int(tokens_total), int(tokens_per_node), int(tokens_per_card)])
 
 table.title = "performance comparison"
 print(table)
