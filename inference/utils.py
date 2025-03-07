@@ -69,14 +69,13 @@ def plot_roofline(bsz, perfs, passing_points, hws):
     plt.tight_layout()
     plt.show()
 
-def draw_table():
+def draw_table(passing_points, hws):
     table = PrettyTable()
     table.field_names = ["ai chip name", "compute bound batch size"]
 
     # 添加数据
-    table.add_row(["Alice", 30])
-    table.add_row(["Bob", 25])
-    table.add_row(["Charlie", 35])
+    for idx, points in enumerate(passing_points):
+        table.add_row([hws[idx].hw_name, points[0]])
 
     table.title = "roofline"  # 添加标题
 
@@ -95,3 +94,10 @@ class HW_DATA(object):
 
     def __post_init__(self):
         self.critical_OI = self.peak_flops / self.memory_bandwidth
+
+hws = [
+    HW_DATA("MI308x", 464e12, 5300e9, 896e9, 50e9), 
+    HW_DATA("H100-SGM", 1900e12, 3300e9, 900e9, 50e9),
+    HW_DATA("H200", 1900e12, 4800e9, 900e9, 50e9),
+    ]
+

@@ -16,15 +16,6 @@ def mla_compute_intensity(b, hidden_dim, h_q, h_c, n_h, h_d, h_dr, tp):
     gemm_5_mem = mem_acc_size_per_gemm(1, b, n_h // tp * h_d, hidden_dim, 1)
     return (gemm_0_ops + gemm_1_ops + gemm_2_ops + gemm_3_ops + gemm_4_ops + gemm_5_ops) / (gemm_0_mem + gemm_1_mem + gemm_2_mem + gemm_3_mem + gemm_4_mem + gemm_5_mem)
 
-hws = [
-    HW_DATA("MI308x", 464e12, 5300e9, 896e9, 50e9), 
-    HW_DATA("H100-SGM", 1900e12, 3300e9, 900e9, 50e9),
-    HW_DATA("H200", 1900e12, 4800e9, 900e9, 50e9),
-    ]
-
-# 设置硬件参数
-peak_flops = 1300e12       # 1 TFLOP/s
-memory_bandwidth = 4800e9  # 200 GB/s
 
 # 设置模型参数
 hidden_dim = 7168
@@ -33,7 +24,7 @@ h_c = 512
 n_h = 128
 h_d = 128
 h_d_r = 64
-tp = 8
+tp = 1
 expert_hidden_dim = 2048
 num_experts = 256
 topk = 8
@@ -49,7 +40,7 @@ points = [tuple(item) for item in zip(bsz, real_OI)]
 
 # 生成运算强度范围（对数坐标）
 # OI = np.logspace(-1, 2, 500)  # 从0.1到100 FLOP/byte
-OI = np.linspace(0.1, 100, 50)  # 从0.1到100 FLOP/byte
+# OI = np.linspace(0.1, 100, 50)  # 从0.1到100 FLOP/byte
 
 # 计算理论性能
 # performance = np.minimum(memory_bandwidth * OI, peak_flops)
@@ -70,4 +61,4 @@ for ele in hws:
 
 plot_roofline(bsz, perfs, passing_points, hws)
 
-draw_table()
+draw_table(passing_points, hws)
