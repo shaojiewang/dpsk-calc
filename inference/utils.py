@@ -37,9 +37,9 @@ def mla0_time_ms(bs, h, h_q, h_c, h_d, h_dr, nh, tflops, hbm_bw):
 
 def mla1_time_ms(bs, context_len, nh, h_d, h_dr, h_c, h, tflops, hbm_bw):
     attn_comp_ms = ops_per_attn(bs, nh, 1, context_len, h_c + h_dr, h_c) / tflops
-    print(f"attn_comp_ms={attn_comp_ms}")
+    #print(f"attn_comp_ms={attn_comp_ms}")
     attn_mem_ms = mem_acc_size_per_attn(bs, nh, 1, 1, context_len, h_c + h_dr, h_c, 2) / hbm_bw
-    print(f"attn_mem_ms={attn_mem_ms}")
+    #print(f"attn_mem_ms={attn_mem_ms}")
     absorption_gemm_comp_ms = ops_per_gemm(nh, bs, h_c, h_d) / tflops
     absorption_gemm_mem_ms = mem_acc_size_per_gemm(nh, bs, h_c, h_d, 1) / hbm_bw
     o_proj_gemm_comp_ms = ops_per_gemm(1, bs, nh * h_d, h) / tflops
@@ -49,7 +49,7 @@ def mla1_time_ms(bs, context_len, nh, h_d, h_dr, h_c, h, tflops, hbm_bw):
 def moe_time_ms(bs, h, e, topk, ep, num_experts, tflops, hbm_bw):
     up_gemm_comp_ms = ops_per_gemm(1, topk * bs // ep, e * 2, h) / tflops
     up_gemm_mem_ms = mem_acc_size_per_grouped_gemm(topk, num_experts // ep, bs // ep, e * 2, h, 1) / hbm_bw
-    print(f"up_gemm_comp_ms={up_gemm_comp_ms}, up_gemm_mem_ms={up_gemm_mem_ms}")
+    #print(f"up_gemm_comp_ms={up_gemm_comp_ms}, up_gemm_mem_ms={up_gemm_mem_ms}")
     down_gemm_comp_ms = ops_per_gemm(1, topk * bs // ep, h, e) / tflops
     down_gemm_mem_ms = mem_acc_size_per_grouped_gemm(topk, num_experts // ep, bs // ep, h, e, 1) / hbm_bw
     return max(up_gemm_comp_ms, up_gemm_mem_ms) + max(down_gemm_comp_ms, down_gemm_mem_ms)
@@ -129,16 +129,20 @@ class HW_DATA(object):
     nvl_bandwidth: float
     nvl_num: int
     ib_bandwidth: float
+    node_price: float
+    electricity_price: float
     #styles: dict
 
     def __post_init__(self):
         self.critical_OI = self.peak_flops / self.memory_bandwidth
+        self.total_price_per_hour = (self.node_price + self.electricity_price) / 4 / 8760 / 8
+        print(f"{self.hw_name}: {self.total_price_per_hour}")
 
 hws = [
-    HW_DATA("MI308x", 192 * 1024 ** 3, 464e12, 5300e9, 448e9, 8, 50e9), 
-    HW_DATA("H800-SGM", 80 * 1024 ** 3, 1900e12, 3300e9, 200e9, 8, 50e9),
-    HW_DATA("H200", 141 * 1024 ** 3, 1900e12, 4800e9, 450e9, 8, 50e9),
-    HW_DATA("910B", 64 * 1024 ** 3, 750e12, 1600e9, 196e9, 8, 50e9),
-    HW_DATA("910C", 128 * 1024 ** 3, 1500e12, 3200e9, 392e9, 384, 50e9),
+    HW_DATA("MI308x", 192 * 1024 ** 3, 464e12, 5300e9, 448e9, 8, 50e9, 150000, 28382), 
+    HW_DATA("H800-SGM", 80 * 1024 ** 3, 1900e12, 3300e9, 200e9, 8, 50e9, 250000, 31536),
+    HW_DATA("H200", 141 * 1024 ** 3, 1900e12, 4800e9, 450e9, 8, 50e9, 250000, 31536),
+    HW_DATA("910B", 64 * 1024 ** 3, 750e12, 1600e9, 196e9, 8, 50e9, 200000, 39420),
+    HW_DATA("910C", 128 * 1024 ** 3, 1500e12, 3200e9, 392e9, 384, 50e9, 200000, 50457),
     ]
 
