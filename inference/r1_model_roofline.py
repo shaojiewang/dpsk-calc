@@ -16,7 +16,7 @@ topk = 8
 num_shared_experts = 1
 num_layers = 61
 
-context_lens = [4096, 5120, 6144, 8192, 16384, 65536]
+context_lens = [5120, 16384, 65536]
 best_tgs_lists = []
 best_price_lists = []
 for _ in hws:
@@ -36,7 +36,7 @@ model_stable_size = 14.11 * 1024 ** 3
 model_dist_size = 609 * 1024 ** 3
 kvcache_size_per_token = 70272
 
-table.field_names = ["ai chip name", "context", "ep", "max_bsz", "latency", "tps", "tps/node", "tps/card"]
+table.field_names = ["ai chip name", "context", "ep", "max_bsz", "latency", "tps", "tps/node", "tps/card", '$/M-tokens']
 
 epsilon = 1e-9
 for i, context_len in enumerate(context_lens):
@@ -66,7 +66,12 @@ for i, context_len in enumerate(context_lens):
             tokens_total = 1 / time_ms * max_bsz / 1000
             tokens_per_node = tokens_total / max(1, (ep / hw.nvl_num))
             tokens_per_card = tokens_total / ep
-            table.add_row([hw.hw_name, context_len, ep, max_bsz, f"{time_ms:.3f}", f"{tokens_total:.1f}k", f'{tokens_per_node:.1f}k', f'{tokens_per_card:.2f}k'])
+            #print(f"tokens_per_card={tokens_per_card}")
+            if tokens_per_card == 0:
+                dollar_per_m_tokens = 0
+            else:
+                dollar_per_m_tokens = hw.total_price_per_hour / (3.6 * tokens_per_card)
+            table.add_row([hw.hw_name, context_len, ep, max_bsz, f"{time_ms:.3f}", f"{tokens_total:.1f}k", f'{tokens_per_node:.1f}k', f'{tokens_per_card:.2f}k', f'{dollar_per_m_tokens:.2f}$/M'])
             tgs.append(tokens_per_card)
             best_tgs_lists[j][i] = max(best_tgs_lists[j][i], tokens_per_card)
             
