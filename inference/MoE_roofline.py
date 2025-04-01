@@ -14,20 +14,20 @@ def moe_compute_intensity(b, h, e, tp, topk, num_experts, num_shared_experts):
     return (shared_gemm_up_ops + shared_gemm_down_ops + routed_gemm_up_ops + routed_gemm_down_ops) / (shared_gemm_up_mem + shared_gemm_down_mem + routed_gemm_up_mem + routed_gemm_down_mem)
 
 # 设置模型参数
-hidden_dim = 7168
+hidden_dim = 2048
 h_q = 1536
 h_c = 512
 n_h = 128
 h_d = 128
 h_d_r = 64
 tp = 1
-expert_hidden_dim = 2048
-num_experts = 256
-topk = 8
-num_shared_experts = 1
+expert_hidden_dim = 1408
+num_experts = 64
+topk = 6
+num_shared_experts = 2
 
 
-max_bsz = 18000
+max_bsz = 8000
 
 bsz = np.linspace(1, max_bsz, max_bsz)
 #real_OI = mla_compute_intensity(bsz, hidden_dim, h_q, h_c, n_h, h_d, h_d_r, tp)
