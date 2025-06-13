@@ -20,6 +20,9 @@ kvcache_size_per_token = num_layers * kv_heads * head_dim * 2 * 2
 model_stable_size = 0
 model_dist_size = 40 * (10 ** 9)
 
+table = PrettyTable()
+table.field_names = ["tpye", "ai chip name", "context", "ep", "max_bsz", "latency", "tgs", "improve_ratio"]
+
 epsilon = 1e-9
 for i, context_len in enumerate(context_lens):
     for j, hw in enumerate(hws):
@@ -52,6 +55,9 @@ for i, context_len in enumerate(context_lens):
             tokens_per_card = tokens_total / tp
             print("gqa model")
             print(f"{context_len}: {tokens_per_card=}")
+            tokens_per_card_gqa = tokens_per_card
+            ratio = tokens_per_card / tokens_per_card_gqa
+            table.add_row(["GQA", hw.hw_name, context_len, tp, max_bsz, f"{time_ms:.3f}", f'{tokens_per_card:.2f}k', f'{ratio:.2f}'])
 
 #for 40B MLA model
 print("MLA")
@@ -92,5 +98,7 @@ for i, context_len in enumerate(context_lens):
             tokens_per_card = tokens_total / tp
             print("mla model")
             print(f"{context_len}: {tokens_per_card=}")
+            ratio = tokens_per_card / tokens_per_card_gqa
+            table.add_row(["MLA", hw.hw_name, context_len, tp, max_bsz, f"{time_ms:.3f}", f'{tokens_per_card:.2f}k', f'{ratio:.2f}'])
 
 
