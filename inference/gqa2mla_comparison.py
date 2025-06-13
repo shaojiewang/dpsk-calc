@@ -101,4 +101,6 @@ for i, context_len in enumerate(context_lens):
             ratio = tokens_per_card / tokens_per_card_gqa
             table.add_row(["MLA", hw.hw_name, context_len, tp, max_bsz, f"{time_ms:.3f}", f'{tokens_per_card:.2f}k', f'{ratio:.2f}'])
 
+table.title = "GQA vs MLA performance comparison"
+print(table)
 
