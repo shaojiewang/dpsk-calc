@@ -26,6 +26,16 @@ def shared_expert_time_ms(bs, h, dp, e, num_shared, tflops, hbm_bw):
     mem_ms = (mem_acc_size_per_gemm(1, bs / dp, e * 2 * num_shared, h, 1) + mem_acc_size_per_gemm(num_shared, bs / dp, h * num_shared, e, 1)) / hbm_bw
     return max(comp_ms, mem_ms)
 
+def gemm_time_ms(bs, h, k, tflops, hbm_bw, ele_size = 1):
+    comp_ms = ops_per_gemm(1, bs, h, k) / tflops
+    mem_ms =  mem_acc_size_per_gemm(1, bs, h, k, ele_size) / hbm_bw
+    return max(comp_ms, mem_ms)
+
+def attn_time_ms(bs, context_len, nh_q, nh_kv, h_dr, h_c, tflops, hbm_bw, ele_size = 2):
+    attn_comp_ms = ops_per_attn(bs, nh_q, 1, context_len, h_c + h_dr, h_c) / tflops
+    attn_mem_ms = mem_acc_size_per_attn(bs, nh_q, nh_kv, 1, context_len, h_c + h_dr, h_c, ele_size) / hbm_bw
+    return max(attn_comp_ms, attn_mem_ms)
+
 def mla0_time_ms(bs, h, h_q, h_c, h_d, h_dr, nh, tflops, hbm_bw):
     comp_ms = (ops_per_gemm(1, bs, h_q + h_c + h_dr, h) + 
                ops_per_gemm(1, bs, nh * (h_d + h_dr), h_q) + 
@@ -139,16 +149,16 @@ class HW_DATA(object):
         print(f"{self.hw_name}: {self.total_price_per_hour}")
 
 hws = [
-    HW_DATA("GB200", 192 * 1024 ** 3, 5000e12, 8000e9, 900e9, 8, 900e9, 1, 1), 
-    HW_DATA("B200", 192 * 1024 ** 3, 5000e12, 8000e9, 900e9, 8, 100e9, 1, 1), 
-    HW_DATA("MI308x", 192 * 1024 ** 3, 464e12, 5300e9, 448e9, 8, 50e9, 1, 1), 
-    HW_DATA("4090-48GB", 48 * 1024 ** 3, 660e12, 1000e9, 32e9, 8, 32e9, 1, 1), 
-    HW_DATA("5090-96GB", 96 * 1024 ** 3, 840e12, 1800e9, 64e9, 8, 50e9, 1, 1), 
-    HW_DATA("H20", 96 * 1024 ** 3, 296e12, 4000e9, 450e9, 8, 50e9, 1, 1), 
-    HW_DATA("H20-141GB", 141 * 1024 ** 3, 296e12, 4000e9, 450e9, 8, 50e9, 1, 1), 
-    HW_DATA("H800-SGM", 80 * 1024 ** 3, 1900e12, 3300e9, 200e9, 8, 50e9, 1, 1),
+    #HW_DATA("GB200", 192 * 1024 ** 3, 5000e12, 8000e9, 900e9, 8, 900e9, 1, 1), 
+    #HW_DATA("B200", 192 * 1024 ** 3, 5000e12, 8000e9, 900e9, 8, 100e9, 1, 1), 
+    #HW_DATA("MI308x", 192 * 1024 ** 3, 464e12, 5300e9, 448e9, 8, 50e9, 1, 1), 
+    #HW_DATA("4090-48GB", 48 * 1024 ** 3, 660e12, 1000e9, 32e9, 8, 32e9, 1, 1), 
+    #HW_DATA("5090-96GB", 96 * 1024 ** 3, 840e12, 1800e9, 64e9, 8, 50e9, 1, 1), 
+    #HW_DATA("H20", 96 * 1024 ** 3, 296e12, 4000e9, 450e9, 8, 50e9, 1, 1), 
+    #HW_DATA("H20-141GB", 141 * 1024 ** 3, 296e12, 4000e9, 450e9, 8, 50e9, 1, 1), 
+    #HW_DATA("H800-SGM", 80 * 1024 ** 3, 1900e12, 3300e9, 200e9, 8, 50e9, 1, 1),
     HW_DATA("H200", 141 * 1024 ** 3, 1900e12, 4800e9, 450e9, 8, 50e9, 1, 1),
-    HW_DATA("910B", 64 * 1024 ** 3, 750e12, 1600e9, 196e9, 8, 50e9, 1, 1),
-    HW_DATA("910C", 128 * 1024 ** 3, 1500e12, 3200e9, 392e9, 384, 50e9, 1, 1),
+    #HW_DATA("910B", 64 * 1024 ** 3, 750e12, 1600e9, 196e9, 8, 50e9, 1, 1),
+    #HW_DATA("910C", 128 * 1024 ** 3, 1500e12, 3200e9, 392e9, 384, 50e9, 1, 1),
     ]
 
