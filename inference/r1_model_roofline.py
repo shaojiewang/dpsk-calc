@@ -16,7 +16,7 @@ topk = 8
 num_shared_experts = 1
 num_layers = 61
 
-context_lens = [4096, 5120, 6144, 8192, 10 * 1024, 12 * 1024, 16384, 32*1024, 64 * 1024, 100 * 1024]
+context_lens = [750, 1024, 4096, 5120, 6144, 8192, 10 * 1024, 12 * 1024, 16384, 32*1024, 64 * 1024, 100 * 1024]
 best_tgs_lists = []
 best_price_lists = []
 for _ in hws:
